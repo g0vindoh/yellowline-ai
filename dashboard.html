@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YellowLine AI — Platform Safety</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;500;600;700;900&family=Barlow+Condensed:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0:       #080a0d;
+    --bg-1:       #0d1117;
+    --bg-2:       #121820;
+    --bg-3:       #1a2230;
+    --bg-card:    #111720;
+    --border:     #1e2a3a;
+    --border-hi:  #2a3d52;
+
+    --safe:       #00e5a0;
+    --safe-dim:   #004d36;
+    --caution:    #f5c842;
+    --caution-dim:#4a3c00;
+    --danger:     #ff3b3b;
+    --danger-dim: #4a0000;
+    --edge-col:   #ff4444;
+    --buf-col:    #f5c842;
+    --info:       #4d9fff;
+    --info-dim:   #0a2040;
+    --metro:      #a78bfa;
+    --metro-dim:  #2d1f6e;
+
+    --text-1:     #e8edf5;
+    --text-2:     #8a9bb0;
+    --text-3:     #4a5a6e;
+
+    --mono:       'Share Tech Mono', monospace;
+    --sans:       'Barlow', sans-serif;
+    --cond:       'Barlow Condensed', sans-serif;
+
+    --radius:     6px;
+    --gap:        12px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-0);
+    color: var(--text-1);
+    font-family: var(--sans);
+    font-size: 13px;
+    overflow: hidden;
+  }
+
+  /* ── LAYOUT ── */
+  #app {
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    grid-template-columns: 260px 1fr 280px;
+    height: 100vh;
+    gap: 0;
+  }
+
+  /* ── TOPBAR ── */
+  #topbar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 16px;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .logo-mark {
+    width: 28px; height: 28px;
+    background: var(--caution);
+    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+    flex-shrink: 0;
+  }
+  .logo-text {
+    font-family: var(--cond);
+    font-weight: 900;
+    font-size: 17px;
+    letter-spacing: 0.08em;
+    color: var(--text-1);
+  }
+  .logo-version {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-3);
+    margin-top: 2px;
+  }
+
+  .top-divider {
+    width: 1px; height: 24px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  #top-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-3);
+    transition: background 0.3s;
+  }
+  .status-dot.online  { background: var(--safe); box-shadow: 0 0 8px var(--safe); }
+  .status-dot.danger  { background: var(--danger); animation: pulse-dot 0.6s infinite alternate; }
+  .status-dot.caution { background: var(--caution); }
+  @keyframes pulse-dot { to { opacity: 0.3; } }
+
+  #status-label {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    color: var(--safe);
+    transition: color 0.3s;
+  }
+
+  .top-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .top-alerts {
+    display: flex;
+    gap: 6px;
+    margin-left: 8px;
+  }
+  .alert-chip {
+    font-family: var(--cond);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    display: none;
+    animation: flash-chip 0.5s infinite alternate;
+  }
+  .alert-chip.fall   { background: var(--danger); color: #fff; display: none; }
+  .alert-chip.surge  { background: #ff8800; color: #000; display: none; }
+  .alert-chip.metro  { background: var(--metro); color: #fff; }
+  .alert-chip.tof    { background: var(--danger); color: #fff; }
+  .alert-chip.active { display: inline-block; }
+  @keyframes flash-chip { to { opacity: 0.5; } }
+
+  #top-time {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--text-2);
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  /* ── LEFT PANEL ── */
+  #panel-left {
+    background: var(--bg-1);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* ── CENTER ── */
+  #panel-center {
+    background: var(--bg-0);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+    padding: var(--gap);
+    overflow: hidden;
+  }
+
+  /* ── RIGHT PANEL ── */
+  #panel-right {
+    background: var(--bg-1);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* ── SECTION HEADERS ── */
+  .sec-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg-1);
+    z-index: 10;
+  }
+  .sec-header-title {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--text-3);
+    text-transform: uppercase;
+    flex: 1;
+  }
+  .sec-header-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--info);
+    background: var(--info-dim);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  /* ── METRIC CARDS ── */
+  .metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .metric-cell {
+    background: var(--bg-card);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .metric-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .metric-value {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 26px;
+    line-height: 1;
+    color: var(--text-1);
+    transition: color 0.3s;
+  }
+  .metric-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-3);
+  }
+
+  /* ── RISK GAUGE ── */
+  #risk-section {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .risk-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .risk-title {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--text-3);
+    text-transform: uppercase;
+  }
+  #risk-number {
+    font-family: var(--cond);
+    font-weight: 900;
+    font-size: 36px;
+    line-height: 1;
+    color: var(--safe);
+    transition: color 0.3s;
+  }
+  .risk-track {
+    height: 6px;
+    background: var(--bg-3);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  #risk-bar {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    transition: width 0.5s ease, background 0.3s;
+    background: var(--safe);
+  }
+  .risk-ticks {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-3);
+  }
+
+  /* ── ZONE VISUALIZER ── */
+  #zone-vis {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .zone-bar-wrap {
+    height: 32px;
+    background: var(--bg-3);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    position: relative;
+    margin: 8px 0;
+  }
+  #zone-edge-seg {
+    background: linear-gradient(90deg, rgba(255,60,60,0.6), rgba(255,60,60,0.2));
+    border-right: 2px solid var(--edge-col);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: width 0.5s;
+  }
+  #zone-buf-seg {
+    background: linear-gradient(90deg, rgba(245,200,66,0.15), rgba(245,200,66,0.05));
+    border-right: 1px solid var(--buf-col);
+    transition: width 0.5s;
+  }
+  #zone-safe-seg { flex: 1; }
+  .zone-seg-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    font-weight: bold;
+    color: rgba(255,255,255,0.7);
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+  .zone-counts {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .zone-count-item {
+    text-align: center;
+    padding: 6px;
+    border-radius: var(--radius);
+    background: var(--bg-3);
+  }
+  .zone-count-n {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 20px;
+    line-height: 1;
+  }
+  .zone-count-l {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-3);
+    margin-top: 2px;
+  }
+
+  /* ── CONTROLS ── */
+  .ctrl-section {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ctrl-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-3);
+    flex: 1;
+    letter-spacing: 0.05em;
+  }
+  .toggle {
+    width: 36px; height: 20px;
+    background: var(--bg-3);
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: 1px solid var(--border-hi);
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--safe-dim); border-color: var(--safe); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    background: var(--text-3);
+    border-radius: 50%;
+    top: 2px; left: 2px;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .toggle.on::after { transform: translateX(16px); background: var(--safe); }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--bg-3);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--info);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .range-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .range-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .range-val {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--info);
+  }
+
+  .btn {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-hi);
+    background: var(--bg-3);
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--border-hi); color: var(--text-1); }
+  .btn.active { background: var(--danger-dim); border-color: var(--danger); color: var(--danger); }
+  .btn.primary { background: var(--info-dim); border-color: var(--info); color: var(--info); }
+  .btn.warn { background: var(--caution-dim); border-color: var(--caution); color: var(--caution); }
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* ── CENTER: VIDEO ── */
+  #video-wrap {
+    position: relative;
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    flex: 1;
+    min-height: 0;
+  }
+  #video-feed {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  #video-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  #video-offline {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: var(--bg-1);
+  }
+  .offline-icon {
+    width: 48px; height: 48px;
+    border: 2px solid var(--text-3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    font-size: 22px;
+  }
+  .offline-text {
+    font-family: var(--cond);
+    font-size: 14px;
+    color: var(--text-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* Emergency overlay on video */
+  #emergency-flash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    background: rgba(255, 30, 30, 0.18);
+    transition: opacity 0.1s;
+  }
+  #emergency-flash.active { opacity: 1; animation: emflash 0.5s infinite alternate; }
+  @keyframes emflash { to { opacity: 0.05; } }
+
+  /* Boarding overlay on video */
+  #boarding-banner {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(167,139,250,0.15);
+    border-top: 1px solid var(--metro);
+    padding: 6px 14px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+  }
+  #boarding-banner.active { display: flex; }
+  .boarding-text {
+    font-family: var(--cond);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--metro);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .boarding-conf {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: rgba(167,139,250,0.6);
+    margin-left: auto;
+  }
+
+  /* ── CENTER: CHART ── */
+  #chart-wrap {
+    height: 100px;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  #chart-label {
+    position: absolute;
+    top: 8px; left: 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  #chart-tabs {
+    position: absolute;
+    top: 6px; right: 10px;
+    display: flex;
+    gap: 4px;
+  }
+  .chart-tab {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    cursor: pointer;
+    color: var(--text-3);
+    background: var(--bg-3);
+    border: 1px solid transparent;
+  }
+  .chart-tab.active { color: var(--info); border-color: var(--info); background: var(--info-dim); }
+  #riskChart { width: 100% !important; height: 68px !important; margin-top: 22px; }
+
+  /* ── RIGHT: EVENT LOG ── */
+  #event-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+  }
+  .event-item {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    animation: slide-in 0.2s ease;
+  }
+  @keyframes slide-in { from { opacity: 0; transform: translateX(8px); } }
+  .event-time {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-3);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .event-msg {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--text-2);
+    line-height: 1.4;
+  }
+  .event-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--text-3);
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+  .event-item.crit .event-dot { background: var(--danger); }
+  .event-item.crit .event-msg { color: var(--danger); }
+  .event-item.warn .event-dot { background: var(--caution); }
+  .event-item.warn .event-msg { color: var(--text-1); }
+  .event-item.info .event-dot { background: var(--info); }
+
+  /* ── RIGHT: INCIDENTS ── */
+  .incident-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    animation: slide-in 0.2s ease;
+  }
+  .incident-thumb {
+    width: 48px; height: 36px;
+    background: var(--bg-3);
+    border-radius: 3px;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+  }
+  .incident-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .incident-info { flex: 1; min-width: 0; }
+  .incident-label {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--text-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .incident-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-3);
+    margin-top: 2px;
+  }
+  .incident-risk {
+    font-family: var(--cond);
+    font-weight: 900;
+    font-size: 16px;
+    color: var(--danger);
+    flex-shrink: 0;
+  }
+
+  /* ── STATS ROW ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-cell {
+    background: var(--bg-card);
+    padding: 8px 10px;
+    text-align: center;
+  }
+  .stat-n {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--text-1);
+  }
+  .stat-l {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-3);
+    margin-top: 1px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── CROWD PREDICTION ── */
+  .pred-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .pred-cell {
+    background: var(--bg-card);
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .pred-horizon {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .pred-val {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--text-2);
+    margin: 2px 0;
+  }
+  .pred-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-3);
+  }
+
+  /* ── CONNECTION STATUS ── */
+  #conn-bar {
+    grid-column: 1 / -1;
+    display: none;
+    background: var(--danger-dim);
+    border-top: 1px solid var(--danger);
+    padding: 6px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--danger);
+    letter-spacing: 0.05em;
+    text-align: center;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 999;
+  }
+  #conn-bar.show { display: block; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+  /* ── RESPONSIVE LABEL ── */
+  .uptime-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-3);
+    padding: 4px 14px 8px;
+  }
+
+  /* ── PRIVACY BADGE ── */
+  #privacy-badge {
+    display: none;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--safe);
+    background: var(--safe-dim);
+    padding: 2px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--safe);
+  }
+  #privacy-badge.active { display: inline-block; }
+
+  /* ── PERSON TABLE ── */
+  .person-row {
+    display: grid;
+    grid-template-columns: 40px 50px 70px 1fr;
+    gap: 0;
+    padding: 5px 14px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-3);
+    align-items: center;
+  }
+  .person-row.edge   { border-left: 2px solid var(--edge-col); background: rgba(255,60,60,0.04); }
+  .person-row.buffer { border-left: 2px solid var(--buf-col); }
+  .person-zone-pill {
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: bold;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    display: inline-block;
+    width: fit-content;
+  }
+  .person-zone-pill.edge   { background: var(--danger-dim); color: var(--danger); }
+  .person-zone-pill.buffer { background: var(--caution-dim); color: var(--caution); }
+  .person-zone-pill.safe   { background: var(--bg-3); color: var(--text-3); }
+  .dwell-bar-wrap {
+    height: 4px;
+    background: var(--bg-3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .dwell-bar {
+    height: 100%;
+    background: var(--safe);
+    border-radius: 2px;
+    transition: width 0.5s, background 0.3s;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <div>
+        <div class="logo-text">YELLOWLINE AI</div>
+        <div class="logo-version">v8.0 · PLATFORM SAFETY</div>
+      </div>
+    </div>
+
+    <div class="top-divider"></div>
+
+    <div id="top-status">
+      <div class="status-dot" id="status-dot"></div>
+      <div id="status-label">OFFLINE</div>
+    </div>
+
+    <div class="top-alerts">
+      <span class="alert-chip fall"  id="chip-fall">⚡ FALL</span>
+      <span class="alert-chip surge" id="chip-surge">⚡ SURGE</span>
+      <span class="alert-chip metro" id="chip-metro" style="display:none">🚇 BOARDING</span>
+      <span class="alert-chip tof"   id="chip-tof"   style="display:none">📡 TOF DANGER</span>
+    </div>
+
+    <div id="privacy-badge" class="active" style="display:none">🔒 PRIVACY MODE</div>
+
+    <div class="top-meta" id="top-fps">— fps</div>
+    <div class="top-meta" id="top-uptime">UP: 00:00:00</div>
+
+    <div id="top-time">--:--:--</div>
+  </div>
+
+  <!-- LEFT PANEL -->
+  <div id="panel-left">
+
+    <!-- Risk -->
+    <div id="risk-section">
+      <div class="risk-header">
+        <div class="risk-title">Platform Risk</div>
+        <div id="risk-number">0</div>
+      </div>
+      <div class="risk-track">
+        <div id="risk-bar"></div>
+      </div>
+      <div class="risk-ticks">
+        <span>SAFE</span><span>30</span><span>65</span><span>CRITICAL</span>
+      </div>
+    </div>
+
+    <!-- Zone counts -->
+    <div id="zone-vis">
+      <div class="sec-header-title" style="font-family:var(--cond);font-size:11px;letter-spacing:0.15em;color:var(--text-3);text-transform:uppercase;margin-bottom:6px;">Zone Overview</div>
+      <div class="zone-bar-wrap">
+        <div id="zone-edge-seg" style="width:20%">
+          <span class="zone-seg-label" style="left:6px">EDGE</span>
+        </div>
+        <div id="zone-buf-seg" style="width:18%"></div>
+        <div id="zone-safe-seg"></div>
+      </div>
+      <div class="zone-counts">
+        <div class="zone-count-item" style="border:1px solid var(--danger-dim)">
+          <div class="zone-count-n" style="color:var(--edge-col)" id="cnt-edge">0</div>
+          <div class="zone-count-l" style="color:var(--edge-col)">EDGE</div>
+        </div>
+        <div class="zone-count-item" style="border:1px solid var(--caution-dim)">
+          <div class="zone-count-n" style="color:var(--buf-col)" id="cnt-buf">0</div>
+          <div class="zone-count-l" style="color:var(--buf-col)">BUFFER</div>
+        </div>
+        <div class="zone-count-item">
+          <div class="zone-count-n" id="cnt-total">0</div>
+          <div class="zone-count-l">TOTAL</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session stats -->
+    <div class="stats-row">
+      <div class="stat-cell"><div class="stat-n" id="st-incidents">0</div><div class="stat-l">Incidents</div></div>
+      <div class="stat-cell"><div class="stat-n" id="st-falls">0</div><div class="stat-l">Falls</div></div>
+      <div class="stat-cell"><div class="stat-n" id="st-surges">0</div><div class="stat-l">Surges</div></div>
+      <div class="stat-cell"><div class="stat-n" id="st-alerts">0</div><div class="stat-l">Alerts</div></div>
+    </div>
+
+    <!-- Peak risk -->
+    <div style="padding:8px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text-3);flex:1">PEAK RISK (SESSION)</div>
+      <div id="peak-risk" style="font-family:var(--cond);font-weight:900;font-size:18px;color:var(--caution)">0</div>
+    </div>
+
+    <!-- Crowd prediction -->
+    <div class="sec-header">
+      <div class="sec-header-title">Crowd Forecast</div>
+      <div class="sec-header-badge" id="pred-badge">NO MODEL</div>
+    </div>
+    <div class="pred-row">
+      <div class="pred-cell">
+        <div class="pred-horizon">+5 min</div>
+        <div class="pred-val" id="pred-5">—</div>
+        <div class="pred-label">in edge</div>
+      </div>
+      <div class="pred-cell">
+        <div class="pred-horizon">+15 min</div>
+        <div class="pred-val" id="pred-15">—</div>
+        <div class="pred-label">in edge</div>
+      </div>
+      <div class="pred-cell">
+        <div class="pred-horizon">+30 min</div>
+        <div class="pred-val" id="pred-30">—</div>
+        <div class="pred-label">in edge</div>
+      </div>
+    </div>
+
+    <!-- Fuzzy Logic AI Panel -->
+    <div class="sec-header">
+      <div class="sec-header-title">Fuzzy Risk Engine</div>
+      <div id="fuzzy-engine-badge" style="font-family:var(--mono);font-size:10px;color:var(--safe);background:var(--safe-dim);padding:1px 6px;border-radius:3px;">FIS</div>
+    </div>
+
+    <!-- Input variables -->
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px;">Inputs</div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-3)">IN ZONE</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-2)" id="fz-in-zone">0</span>
+        </div>
+        <div style="height:4px;background:var(--bg-3);border-radius:2px;overflow:hidden">
+          <div id="fz-bar-zone" style="height:100%;width:0%;background:var(--edge-col);border-radius:2px;transition:width .5s"></div>
+        </div>
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-3)">DWELL</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-2)" id="fz-dwell">0s</span>
+        </div>
+        <div style="height:4px;background:var(--bg-3);border-radius:2px;overflow:hidden">
+          <div id="fz-bar-dwell" style="height:100%;width:0%;background:var(--caution);border-radius:2px;transition:width .5s"></div>
+        </div>
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-3)">IN BUFFER</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-2)" id="fz-in-buf">0</span>
+        </div>
+        <div style="height:4px;background:var(--bg-3);border-radius:2px;overflow:hidden">
+          <div id="fz-bar-buf" style="height:100%;width:0%;background:var(--buf-col);border-radius:2px;transition:width .5s"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Score breakdown -->
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;">Score Breakdown</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
+        <div style="background:var(--bg-3);border-radius:4px;padding:6px;text-align:center">
+          <div style="font-family:var(--cond);font-weight:700;font-size:16px;color:var(--info)" id="fz-base">0</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-3)">BASE</div>
+        </div>
+        <div style="background:var(--bg-3);border-radius:4px;padding:6px;text-align:center">
+          <div style="font-family:var(--cond);font-weight:700;font-size:16px;color:var(--danger)" id="fz-bonus">0</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-3)">BONUS</div>
+        </div>
+        <div style="background:var(--bg-3);border-radius:4px;padding:6px;text-align:center">
+          <div style="font-family:var(--cond);font-weight:700;font-size:16px;color:var(--safe)" id="fz-total">0</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-3)">TOTAL</div>
+        </div>
+      </div>
+
+      <!-- Active bonuses -->
+      <div style="display:flex;gap:4px;flex-wrap:wrap" id="fz-bonus-chips"></div>
+
+      <!-- Active rule -->
+      <div style="margin-top:8px;padding:6px 8px;background:var(--bg-3);border-radius:4px;border-left:2px solid var(--info)">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-3);margin-bottom:2px">ACTIVE RULE</div>
+        <div style="font-family:var(--sans);font-size:11px;color:var(--text-2);line-height:1.4" id="fz-rule">—</div>
+      </div>
+    </div>
+
+    <!-- Metro status -->
+    <div class="sec-header">
+      <div class="sec-header-title">Metro Sync</div>
+      <div id="metro-conf-badge" style="font-family:var(--mono);font-size:10px;color:var(--text-3);background:var(--bg-3);padding:1px 6px;border-radius:3px;">—%</div>
+    </div>
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-3);flex:1">SCHEDULE</div>
+        <div id="metro-sched" style="font-family:var(--mono);font-size:11px;color:var(--text-2)">—</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-3);flex:1">VISUAL</div>
+        <div id="metro-visual" style="font-family:var(--mono);font-size:11px;color:var(--text-2)">—</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-3);flex:1">BOARDING</div>
+        <div id="metro-active" style="font-family:var(--cond);font-weight:700;font-size:13px;color:var(--text-3)">INACTIVE</div>
+      </div>
+    </div>
+
+    <!-- Uptime -->
+    <div class="uptime-label" id="uptime-full">UP: 00:00:00</div>
+
+  </div>
+
+  <!-- CENTER -->
+  <div id="panel-center">
+
+    <!-- Video -->
+    <div id="video-wrap">
+      <img id="video-feed" src="/video" alt="Live feed">
+      <div id="emergency-flash"></div>
+      <div id="boarding-banner">
+        <span class="boarding-text">🚇 Metro Boarding — Alert suppression active</span>
+        <span class="boarding-conf" id="boarding-conf-text">conf —%</span>
+      </div>
+      <div id="video-offline">
+        <div class="offline-icon">◌</div>
+        <div class="offline-text">Awaiting stream…</div>
+      </div>
+    </div>
+
+    <!-- Risk chart -->
+    <div id="chart-wrap">
+      <div id="chart-label">RISK / COUNT HISTORY</div>
+      <div id="chart-tabs">
+        <div class="chart-tab active" data-mode="risk" onclick="switchChart('risk')">Risk</div>
+        <div class="chart-tab" data-mode="count" onclick="switchChart('count')">Count</div>
+      </div>
+      <canvas id="riskChart"></canvas>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div id="panel-right">
+
+    <!-- Controls -->
+    <div class="sec-header">
+      <div class="sec-header-title">Controls</div>
+    </div>
+    <div class="ctrl-section">
+      <div class="ctrl-row">
+        <div class="ctrl-label">Pause Alerts</div>
+        <div class="toggle" id="tog-pause" onclick="togglePause()"></div>
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Heatmap Overlay</div>
+        <div class="toggle on" id="tog-heatmap" onclick="toggleHeatmap()"></div>
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Auto Boarding Pause</div>
+        <div class="toggle on" id="tog-auto" onclick="toggleAuto()"></div>
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Privacy / Silhouette Mode</div>
+        <div class="toggle" id="tog-privacy" onclick="togglePrivacy()"></div>
+      </div>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="range-row">
+        <div class="range-header">
+          <div class="ctrl-label">Edge Zone Width</div>
+          <div class="range-val" id="zone-edge-val">20%</div>
+        </div>
+        <input type="range" id="range-edge" min="5" max="40" value="20" step="1" oninput="onZoneEdge(this.value)" onchange="sendZoneEdge(this.value)">
+      </div>
+      <div class="range-row">
+        <div class="range-header">
+          <div class="ctrl-label">Buffer Zone Width</div>
+          <div class="range-val" id="zone-buf-val">38%</div>
+        </div>
+        <input type="range" id="range-buf" min="10" max="65" value="38" step="1" oninput="onZoneBuf(this.value)" onchange="sendZoneBuf(this.value)">
+      </div>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="btn-row">
+        <button class="btn" onclick="window.open('/api/report','_blank')">📋 Report</button>
+        <button class="btn" onclick="window.open('/api/audit','_blank')">🔍 Audit Log</button>
+        <button class="btn" onclick="window.open('/api/history?minutes=60','_blank')">📈 History</button>
+      </div>
+    </div>
+
+    <!-- Active persons -->
+    <div class="sec-header">
+      <div class="sec-header-title">Active Persons</div>
+      <div class="sec-header-badge" id="persons-count">0</div>
+    </div>
+    <div id="persons-table" style="border-bottom:1px solid var(--border)">
+      <div class="person-row" style="font-family:var(--cond);font-weight:700;letter-spacing:0.1em;font-size:10px;color:var(--text-3);background:var(--bg-0)">
+        <div>ID</div><div>ZONE</div><div>DWELL</div><div>POSITION</div>
+      </div>
+    </div>
+
+    <!-- Incident feed -->
+    <div class="sec-header">
+      <div class="sec-header-title">Incident Feed</div>
+      <div class="sec-header-badge" id="incidents-count">0</div>
+    </div>
+    <div id="incident-feed"></div>
+
+    <!-- Event log -->
+    <div class="sec-header">
+      <div class="sec-header-title">Event Log</div>
+    </div>
+    <div id="event-log"></div>
+
+  </div>
+
+</div>
+
+<div id="conn-bar">⚠ Connection lost — reconnecting…</div>
+
+<script>
+// ── Token from URL ──────────────────────────────────────────────────────────
+const TOKEN = new URLSearchParams(location.search).get('token') || '';
+const AUTH  = TOKEN ? {token: TOKEN} : undefined;
+const HEADERS = TOKEN ? {'X-YL-Token': TOKEN} : {};
+
+// ── Socket ──────────────────────────────────────────────────────────────────
+const socket = io({auth: AUTH, transports: ['websocket','polling']});
+let connected = false;
+let chartMode = 'risk';
+
+socket.on('connect', () => {
+  connected = true;
+  document.getElementById('conn-bar').classList.remove('show');
+  document.getElementById('video-offline').style.display = 'none';
+});
+socket.on('disconnect', () => {
+  connected = false;
+  document.getElementById('conn-bar').classList.add('show');
+  setStatus('OFFLINE', 'offline');
+});
+socket.on('stats', update);
+
+// ── Chart ───────────────────────────────────────────────────────────────────
+const ctx = document.getElementById('riskChart').getContext('2d');
+const chartData = {
+  labels: [],
+  datasets: [{
+    data: [],
+    borderColor: '#ff3b3b',
+    backgroundColor: 'rgba(255,59,59,0.08)',
+    borderWidth: 1.5,
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+  }]
+};
+const riskChart = new Chart(ctx, {
+  type: 'line',
+  data: chartData,
+  options: {
+    animation: false,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: {display: false}, tooltip: {enabled: false} },
+    scales: {
+      x: { display: false },
+      y: {
+        display: true,
+        min: 0, max: 100,
+        ticks: { color: '#4a5a6e', font: {family: 'Share Tech Mono', size: 9}, maxTicksLimit: 4 },
+        grid: { color: 'rgba(30,42,58,0.6)', lineWidth: 1 },
+        border: { display: false }
+      }
+    }
+  }
+});
+
+function switchChart(mode) {
+  chartMode = mode;
+  document.querySelectorAll('.chart-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.mode === mode);
+  });
+  if (mode === 'risk') {
+    riskChart.options.scales.y.max = 100;
+    chartData.datasets[0].borderColor = '#ff3b3b';
+    chartData.datasets[0].backgroundColor = 'rgba(255,59,59,0.08)';
+  } else {
+    riskChart.options.scales.y.max = 30;
+    chartData.datasets[0].borderColor = '#4d9fff';
+    chartData.datasets[0].backgroundColor = 'rgba(77,159,255,0.08)';
+  }
+  riskChart.update('none');
+}
+
+function updateChart(riskHistory, countHistory) {
+  const src = chartMode === 'risk' ? riskHistory : countHistory;
+  const N = 120;
+  const data = (src || []).slice(-N);
+  chartData.labels = data.map((_,i) => i);
+  chartData.datasets[0].data = data;
+  riskChart.update('none');
+}
+
+// ── State tracking ──────────────────────────────────────────────────────────
+let pauseOn = false, heatmapOn = true, autoOn = true, privacyOn = false;
+
+// ── Main update ─────────────────────────────────────────────────────────────
+function update(s) {
+  // Status
+  const status = s.status || 'SAFE';
+  let dotCls = 'online';
+  if (status === 'CRITICAL') dotCls = 'danger';
+  else if (status === 'CAUTION') dotCls = 'caution';
+  setStatus(s.paused ? 'PAUSED' : status, dotCls);
+
+  // Risk bar
+  const risk = s.risk || 0;
+  const riskEl = document.getElementById('risk-number');
+  const riskBar = document.getElementById('risk-bar');
+  riskEl.textContent = risk;
+  riskBar.style.width = risk + '%';
+  let riskColor = 'var(--safe)';
+  if (risk >= 65) riskColor = 'var(--danger)';
+  else if (risk >= 30) riskColor = 'var(--caution)';
+  riskEl.style.color = riskColor;
+  riskBar.style.background = riskColor;
+
+  // Counts
+  document.getElementById('cnt-edge').textContent  = s.in_edge  || 0;
+  document.getElementById('cnt-buf').textContent   = s.in_buffer || 0;
+  document.getElementById('cnt-total').textContent = s.total    || 0;
+
+  // Zone vis
+  const ze = Math.round((s.zone_edge   || 0.20) * 100);
+  const zb = Math.round((s.zone_buffer || 0.38) * 100);
+  document.getElementById('zone-edge-seg').style.width = ze + '%';
+  document.getElementById('zone-buf-seg').style.width  = (zb - ze) + '%';
+  document.getElementById('range-edge').value = ze;
+  document.getElementById('range-buf').value  = zb;
+  document.getElementById('zone-edge-val').textContent = ze + '%';
+  document.getElementById('zone-buf-val').textContent  = zb + '%';
+
+  // Session stats
+  document.getElementById('st-incidents').textContent = s.incidents || 0;
+  document.getElementById('st-falls').textContent     = s.falls     || 0;
+  document.getElementById('st-surges').textContent    = s.surges    || 0;
+  document.getElementById('st-alerts').textContent    = s.alerts    || 0;
+  document.getElementById('peak-risk').textContent    = s.peak_risk || 0;
+
+  // FPS + uptime
+  document.getElementById('top-fps').textContent   = (s.fps || 0).toFixed(1) + ' fps';
+  document.getElementById('top-uptime').textContent = 'UP: ' + fmtUptime(s.uptime || 0);
+  document.getElementById('uptime-full').textContent = 'UP: ' + fmtUptime(s.uptime || 0);
+
+  // Alert chips
+  setChip('chip-fall',  s.fall_alert  || s.edge_loss);
+  setChip('chip-surge', s.surge_alert);
+
+  // Emergency flash
+  const emFlash = document.getElementById('emergency-flash');
+  if (s.fall_alert || s.edge_loss) emFlash.classList.add('active');
+  else emFlash.classList.remove('active');
+
+  // Metro boarding
+  const boarding = s.metro_boarding;
+  document.getElementById('chip-metro').style.display = boarding ? 'inline-block' : 'none';
+  document.getElementById('boarding-banner').classList.toggle('active', !!boarding);
+  document.getElementById('boarding-conf-text').textContent = `conf ${s.metro_confidence || 0}%`;
+  document.getElementById('metro-sched').textContent  = s.metro_schedule_due ? 'DUE' : 'CLEAR';
+  document.getElementById('metro-sched').style.color  = s.metro_schedule_due ? 'var(--metro)' : 'var(--text-3)';
+  document.getElementById('metro-visual').textContent = s.metro_visual_seen  ? 'DETECTED' : 'NOT SEEN';
+  document.getElementById('metro-active').textContent = boarding ? 'ACTIVE' : 'INACTIVE';
+  document.getElementById('metro-active').style.color = boarding ? 'var(--metro)' : 'var(--text-3)';
+  document.getElementById('metro-conf-badge').textContent = (s.metro_confidence || 0) + '%';
+
+  // ToF
+  const tofDanger = s.tof_in_danger;
+  document.getElementById('chip-tof').style.display = tofDanger ? 'inline-block' : 'none';
+
+  // Privacy
+  const priv = s.privacy_mode;
+  document.getElementById('privacy-badge').style.display = priv ? 'inline-block' : 'none';
+  document.getElementById('tog-privacy').classList.toggle('on', !!priv);
+  privacyOn = !!priv;
+
+  // Sync toggles
+  pauseOn   = !!s.manual_paused;
+  heatmapOn = !!s.show_heatmap;
+  autoOn    = !!s.auto_pause_enabled;
+  document.getElementById('tog-pause').classList.toggle('on',   pauseOn);
+  document.getElementById('tog-heatmap').classList.toggle('on', heatmapOn);
+  document.getElementById('tog-auto').classList.toggle('on',    autoOn);
+
+  // Chart
+  updateChart(s.risk_history, s.count_history);
+
+  // Crowd predictions — all three horizons
+  const pred = s.crowd_pred || {};
+  const loaded = pred.models_loaded || [];
+  const nLoaded = loaded.length;
+
+  function fmtPred(val) { return val !== null && val !== undefined ? val.toFixed(1) : '—'; }
+
+  document.getElementById('pred-5').textContent  = fmtPred(pred['5min']);
+  document.getElementById('pred-15').textContent = fmtPred(pred['15min']);
+  document.getElementById('pred-30').textContent = fmtPred(pred['30min']);
+
+  if (nLoaded === 0) {
+    document.getElementById('pred-badge').textContent   = 'TRAINING…';
+    document.getElementById('pred-badge').style.color   = 'var(--text-3)';
+    document.getElementById('pred-badge').style.background = 'var(--bg-3)';
+  } else if (pred.surge_predicted) {
+    document.getElementById('pred-badge').textContent   = '⚠ SURGE LIKELY';
+    document.getElementById('pred-badge').style.color   = 'var(--caution)';
+    document.getElementById('pred-badge').style.background = 'var(--caution-dim)';
+  } else {
+    document.getElementById('pred-badge').textContent   = nLoaded + '/3 MODELS';
+    document.getElementById('pred-badge').style.color   = 'var(--safe)';
+    document.getElementById('pred-badge').style.background = 'var(--safe-dim)';
+  }
+
+  // Colour-code each prediction relative to current
+  const cur = s.in_edge || 0;
+  ['5min','15min','30min'].forEach((h,i) => {
+    const el = document.getElementById(['pred-5','pred-15','pred-30'][i]);
+    const v  = pred[h];
+    if (v === null || v === undefined) { el.style.color = 'var(--text-3)'; return; }
+    el.style.color = v > cur * 1.5 ? 'var(--danger)' : v > cur * 1.1 ? 'var(--caution)' : 'var(--safe)';
+  });
+
+  // Fuzzy logic breakdown
+  const fz = s.fuzzy_detail || {};
+  if (fz.score !== undefined) {
+    const inp = fz.inputs || {};
+    document.getElementById('fz-in-zone').textContent = (inp.in_zone || 0).toFixed(1);
+    document.getElementById('fz-dwell').textContent   = (inp.dwell   || 0).toFixed(1) + 's';
+    document.getElementById('fz-in-buf').textContent  = (inp.in_buf  || 0).toFixed(1);
+    document.getElementById('fz-bar-zone').style.width = Math.min((inp.in_zone||0)/10*100, 100) + '%';
+    document.getElementById('fz-bar-dwell').style.width = Math.min((inp.dwell||0)/60*100, 100) + '%';
+    document.getElementById('fz-bar-buf').style.width  = Math.min((inp.in_buf||0)/15*100, 100) + '%';
+
+    document.getElementById('fz-base').textContent  = fz.base  || 0;
+    document.getElementById('fz-bonus').textContent = '+' + (fz.bonus || 0);
+    document.getElementById('fz-total').textContent = fz.score || 0;
+
+    const scoreColor = fz.score >= 65 ? 'var(--danger)' : fz.score >= 30 ? 'var(--caution)' : 'var(--safe)';
+    document.getElementById('fz-total').style.color = scoreColor;
+
+    // Bonus chips
+    const chips = document.getElementById('fz-bonus-chips');
+    chips.innerHTML = '';
+    const bonuses = fz.bonuses || {};
+    const chipDefs = [
+      ['fall',      '+30 FALL',      'var(--danger)',  'var(--danger-dim)'],
+      ['surge',     '+20 SURGE',     '#ff8800',        '#3d2000'],
+      ['edge_loss', '+35 EDGE LOSS', 'var(--danger)',  'var(--danger-dim)'],
+    ];
+    chipDefs.forEach(([key, label, color, bg]) => {
+      if (bonuses[key]) {
+        const chip = document.createElement('span');
+        chip.style.cssText = `font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:3px;background:${bg};color:${color};border:1px solid ${color};animation:flash-chip .5s infinite alternate`;
+        chip.textContent = label;
+        chips.appendChild(chip);
+      }
+    });
+    if (fz.tof_adjusted) {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:3px;background:var(--info-dim);color:var(--info);border:1px solid var(--info)';
+      chip.textContent = '📡 TOF ADJUSTED';
+      chips.appendChild(chip);
+    }
+
+    document.getElementById('fz-rule').textContent = fz.active_rule || '—';
+    const engineBadge = document.getElementById('fuzzy-engine-badge');
+    engineBadge.textContent = fz.engine === 'fuzzy_fis' ? 'FIS' : 'LINEAR';
+    engineBadge.style.color = fz.engine === 'fuzzy_fis' ? 'var(--safe)' : 'var(--caution)';
+    engineBadge.style.background = fz.engine === 'fuzzy_fis' ? 'var(--safe-dim)' : 'var(--caution-dim)';
+  }
+
+  // Persons table
+  updatePersons(s.persons || []);
+
+  // Events
+  updateEvents(s.event_log || []);
+
+  // Incidents
+  updateIncidents(s.incidents_feed || []);
+  document.getElementById('incidents-count').textContent = (s.incidents_feed || []).length;
+}
+
+function updatePersons(persons) {
+  document.getElementById('persons-count').textContent = persons.length;
+  const tbl = document.getElementById('persons-table');
+  // Remove old rows (keep header)
+  while (tbl.children.length > 1) tbl.removeChild(tbl.lastChild);
+  persons.slice(0, 12).forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'person-row ' + (p.zone || 'safe');
+    const dwell = p.dwell || 0;
+    const dwellPct = Math.min((dwell / 10) * 100, 100);
+    const dwellColor = dwell > 5 ? 'var(--danger)' : dwell > 2 ? 'var(--caution)' : 'var(--safe)';
+    row.innerHTML = `
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text-2)">${p.id ?? '?'}</div>
+      <div><span class="person-zone-pill ${p.zone || 'safe'}">${p.zone || 'safe'}</span></div>
+      <div>
+        <div style="font-family:var(--mono);font-size:10px;color:${dwellColor};margin-bottom:3px">${dwell.toFixed(1)}s</div>
+        <div class="dwell-bar-wrap"><div class="dwell-bar" style="width:${dwellPct}%;background:${dwellColor}"></div></div>
+      </div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text-3)">${p.cx|0}, ${p.cy|0}</div>
+    `;
+    tbl.appendChild(row);
+  });
+}
+
+let lastEvents = [];
+function updateEvents(events) {
+  if (JSON.stringify(events) === JSON.stringify(lastEvents)) return;
+  lastEvents = events;
+  const log = document.getElementById('event-log');
+  log.innerHTML = '';
+  events.slice(0, 20).forEach(e => {
+    const item = document.createElement('div');
+    const msg  = typeof e === 'string' ? e : (e.message || '');
+    const ts   = msg.substring(0, 8);
+    const text = msg.substring(9);
+    let cls = 'info';
+    if (/FALL|EDGE LOSS|EMERGENCY/i.test(text)) cls = 'crit';
+    else if (/ALERT|SURGE|PREDICT|DWELL/i.test(text)) cls = 'warn';
+    item.className = 'event-item ' + cls;
+    item.innerHTML = `
+      <div class="event-dot"></div>
+      <div class="event-time">${ts}</div>
+      <div class="event-msg">${text}</div>
+    `;
+    log.appendChild(item);
+  });
+}
+
+let lastIncidents = [];
+function updateIncidents(incidents) {
+  if (JSON.stringify(incidents) === JSON.stringify(lastIncidents)) return;
+  lastIncidents = incidents;
+  const feed = document.getElementById('incident-feed');
+  feed.innerHTML = '';
+  incidents.slice(0, 6).forEach(inc => {
+    const item = document.createElement('div');
+    item.className = 'incident-item';
+    const riskColor = inc.risk >= 80 ? 'var(--danger)' : 'var(--caution)';
+    item.innerHTML = `
+      <div class="incident-thumb">
+        <img src="/snapshots/${inc.file}" onerror="this.parentNode.innerHTML='<div style=width:100%;height:100%;background:var(--bg-3);display:flex;align-items:center;justify-content:center;font-size:16px>📷</div>'">
+      </div>
+      <div class="incident-info">
+        <div class="incident-label">${inc.label}</div>
+        <div class="incident-meta">${inc.time}</div>
+      </div>
+      <div class="incident-risk" style="color:${riskColor}">${inc.risk}</div>
+    `;
+    feed.appendChild(item);
+  });
+}
+
+// ── Controls ─────────────────────────────────────────────────────────────────
+function sendControl(data) {
+  if (!connected) return;
+  socket.emit('control', data);
+}
+
+function togglePause() {
+  pauseOn = !pauseOn;
+  document.getElementById('tog-pause').classList.toggle('on', pauseOn);
+  sendControl({paused: pauseOn});
+}
+function toggleHeatmap() {
+  heatmapOn = !heatmapOn;
+  document.getElementById('tog-heatmap').classList.toggle('on', heatmapOn);
+  sendControl({show_heatmap: heatmapOn});
+}
+function toggleAuto() {
+  autoOn = !autoOn;
+  document.getElementById('tog-auto').classList.toggle('on', autoOn);
+  sendControl({auto_pause_enabled: autoOn});
+}
+function togglePrivacy() {
+  privacyOn = !privacyOn;
+  document.getElementById('tog-privacy').classList.toggle('on', privacyOn);
+  fetch('/api/privacy', {
+    method: 'POST',
+    headers: {...HEADERS, 'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled: privacyOn})
+  });
+}
+function onZoneEdge(v)  { document.getElementById('zone-edge-val').textContent = v + '%'; }
+function onZoneBuf(v)   { document.getElementById('zone-buf-val').textContent  = v + '%'; }
+function sendZoneEdge(v){ sendControl({zone_edge: v/100}); }
+function sendZoneBuf(v) { sendControl({zone_buffer: v/100}); }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function setStatus(label, cls) {
+  const dot = document.getElementById('status-dot');
+  const lbl = document.getElementById('status-label');
+  dot.className = 'status-dot ' + cls;
+  lbl.textContent = label;
+  const colors = {online:'var(--safe)', danger:'var(--danger)', caution:'var(--caution)', offline:'var(--text-3)'};
+  lbl.style.color = colors[cls] || 'var(--text-3)';
+}
+function setChip(id, active) {
+  document.getElementById(id).classList.toggle('active', !!active);
+}
+function fmtUptime(s) {
+  s = Math.floor(s || 0);
+  const h = Math.floor(s/3600).toString().padStart(2,'0');
+  const m = Math.floor((s%3600)/60).toString().padStart(2,'0');
+  const ss= (s%60).toString().padStart(2,'0');
+  return `${h}:${m}:${ss}`;
+}
+
+// ── Clock ────────────────────────────────────────────────────────────────────
+function tick() {
+  const now = new Date();
+  document.getElementById('top-time').textContent =
+    now.toTimeString().substring(0,8);
+}
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

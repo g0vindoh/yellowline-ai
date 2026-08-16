@@ -1,0 +1,32 @@
+{
+  "features": [
+    "hour",
+    "minute",
+    "day_of_week",
+    "is_peak",
+    "is_weekend",
+    "sin_hour",
+    "cos_hour",
+    "min_to_train",
+    "in_edge",
+    "in_buffer",
+    "total_count",
+    "risk",
+    "rolling_edge_5",
+    "rolling_risk_5"
+  ],
+  "results": {
+    "5min": {
+      "mae": 1.291,
+      "r2": 0.561
+    },
+    "15min": {
+      "mae": 1.32,
+      "r2": 0.546
+    },
+    "30min": {
+      "mae": 1.329,
+      "r2": 0.54
+    }
+  }
+}
